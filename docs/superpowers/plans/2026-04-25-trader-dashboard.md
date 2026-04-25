@@ -22,7 +22,9 @@ trader/
 │   ├── __init__.py
 │   ├── fetcher.py             # yfinance OHLCV + fundamentals fetch
 │   ├── sentiment.py           # RSS + StockTwits + Reddit + Finviz scrape with retry
-│   └── finbert.py             # FinBERT singleton loader + batch inference
+│   ├── finbert.py             # FinBERT singleton loader + batch inference
+│   ├── sp500.csv              # S&P 500 universe: ticker,name,sector,market_cap_category
+│   └── build_sp500.py         # One-time script to refresh sp500.csv from Wikipedia
 ├── scoring/
 │   ├── __init__.py
 │   ├── technical.py           # Indicator signals + chart pattern detection → score 0-100
@@ -34,9 +36,6 @@ trader/
 │   ├── watchlist.py           # Watchlist dashboard page
 │   ├── detail.py              # Stock detail page
 │   └── screener.py            # Screener page
-├── data/
-│   └── sp500.csv              # S&P 500 universe: ticker,name,sector,market_cap_category
-│   └── build_sp500.py         # One-time script to refresh sp500.csv from Wikipedia
 ├── tests/
 │   ├── conftest.py            # Shared fixtures
 │   ├── test_cache.py
@@ -90,6 +89,7 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 scipy>=1.13.0
 pandas>=2.2.0
+lxml>=5.0.0
 pytest>=8.0.0
 pytest-mock>=3.14.0
 ```
@@ -2111,6 +2111,16 @@ def render(ticker: str):
 
     if data.get("fetch_error"):
         st.error(f"Last fetch failed at {data.get('fetch_error_at', 'unknown')}. Showing stale data.")
+
+    updated_at = data.get("updated_at")
+    if updated_at:
+        try:
+            from datetime import datetime, timezone, timedelta
+            dt = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            if (datetime.now(timezone.utc) - dt) > timedelta(hours=config.WATCHLIST_STALE_HOURS):
+                st.warning(f"⚠️ Data is stale — last updated {updated_at[:16].replace('T', ' ')} UTC.")
+        except Exception:
+            pass
 
     # Weight sliders
     st.sidebar.subheader("Score Weights")
