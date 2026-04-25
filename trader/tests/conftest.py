@@ -1,7 +1,4 @@
 import pytest
-import os
-import tempfile
-import json
 
 @pytest.fixture
 def tmp_cache_dir(tmp_path):
