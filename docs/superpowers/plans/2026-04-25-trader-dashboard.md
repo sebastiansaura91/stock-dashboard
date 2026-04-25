@@ -34,7 +34,9 @@ trader/
 │   ├── watchlist.py           # Watchlist dashboard page
 │   ├── detail.py              # Stock detail page
 │   └── screener.py            # Screener page
-│   └── sp500.csv              # S&P 500 universe: ticker,name,sector,market_cap_category (inside data/)
+├── data/
+│   └── sp500.csv              # S&P 500 universe: ticker,name,sector,market_cap_category
+│   └── build_sp500.py         # One-time script to refresh sp500.csv from Wikipedia
 ├── tests/
 │   ├── conftest.py            # Shared fixtures
 │   ├── test_cache.py
@@ -1038,25 +1040,23 @@ def detect_patterns(ohlcv: dict) -> list[dict]:
                 name, meaning, reliability, direction = _PATTERN_INFO["symmetrical_triangle"]
                 patterns.append({"name": name, "detected_at": tri_dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
 
-    # Bull flag (30-day window: strong uptrend then tight downward channel)
+    # Bull flag: flagpole = bars[-30:-10], consolidation = bars[-10:] (≤10 bars per spec)
     if n >= 30:
-        recent = close[-30:]
-        first_half = recent[:15]
-        second_half = recent[15:]
-        uptrend = (first_half[-1] - first_half[0]) / first_half[0] > 0.05
-        tight = np.std(second_half) / np.mean(second_half) < 0.02
-        if uptrend and tight and second_half[-1] < second_half[0]:
+        flagpole = close[-30:-10]
+        consolidation = close[-10:]
+        uptrend = len(flagpole) > 1 and (flagpole[-1] - flagpole[0]) / flagpole[0] > 0.05
+        tight = np.std(consolidation) / np.mean(consolidation) < 0.02
+        if uptrend and tight and consolidation[-1] < consolidation[0]:
             name, meaning, reliability, direction = _PATTERN_INFO["bull_flag"]
             patterns.append({"name": name, "detected_at": dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
 
-    # Bear flag (30-day window: strong downtrend then tight upward channel)
+    # Bear flag: flagpole = bars[-30:-10], consolidation = bars[-10:] (≤10 bars per spec)
     if n >= 30:
-        recent = close[-30:]
-        first_half = recent[:15]
-        second_half = recent[15:]
-        downtrend = (first_half[-1] - first_half[0]) / first_half[0] < -0.05
-        tight = np.std(second_half) / np.mean(second_half) < 0.02
-        if downtrend and tight and second_half[-1] > second_half[0]:
+        flagpole = close[-30:-10]
+        consolidation = close[-10:]
+        downtrend = len(flagpole) > 1 and (flagpole[-1] - flagpole[0]) / flagpole[0] < -0.05
+        tight = np.std(consolidation) / np.mean(consolidation) < 0.02
+        if downtrend and tight and consolidation[-1] > consolidation[0]:
             name, meaning, reliability, direction = _PATTERN_INFO["bear_flag"]
             patterns.append({"name": name, "detected_at": dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
 
@@ -1195,10 +1195,10 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
         norm_atr = atr.iloc[-1] / df["close"].iloc[-1]
         signals["atr"] = 1 if norm_atr < 0.02 else -1
 
-    # Patterns
+    # Patterns — sort by detected_at so most_recent is truly the latest by date
     patterns = detect_patterns(ohlcv)
     if patterns:
-        most_recent = patterns[-1]
+        most_recent = sorted(patterns, key=lambda p: p["detected_at"])[-1]
         signals["pattern"] = 1 if most_recent["direction"] == "bullish" else (-1 if most_recent["direction"] == "bearish" else 0)
         drivers.append(f"Pattern: {most_recent['name']} ({most_recent['direction']})")
     else:
@@ -1916,19 +1916,7 @@ git commit -m "feat: APScheduler singleton with watchlist warmup and screener ba
 
 - [ ] **Step 1: Create a minimal `sp500.csv` with representative tickers**
 
-Download the full S&P 500 list from Wikipedia using this one-time script:
-
-```python
-# run once: python data/build_sp500.py
-import pandas as pd
-tables = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
-df = tables[0][["Symbol", "Security", "GICS Sector", "Market Cap"]]
-df.columns = ["ticker", "name", "sector", "market_cap_category"]
-df["market_cap_category"] = "Large"  # All S&P 500 are large-cap
-df.to_csv("data/sp500.csv", index=False)
-```
-
-Or, create `data/sp500.csv` manually with seed data:
+Create `data/sp500.csv` with the seed tickers below, then run `python data/build_sp500.py` to replace it with the full S&P 500 list from Wikipedia (see Step 2).
 
 ```csv
 ticker,name,sector,market_cap_category
@@ -2355,6 +2343,12 @@ if "scheduler_started" not in st.session_state:
 import config
 
 st.sidebar.title("Trader Dashboard")
+
+# FinBERT failure warning — surfaced in sidebar as required by spec
+from data import finbert as _finbert
+if _finbert._load_failed:
+    st.sidebar.warning("⚠️ FinBERT failed to load. Sentiment scoring is disabled for this session.")
+
 page = st.sidebar.radio("Navigate", ["Watchlist", "Screener"] + config.WATCHLIST)
 
 if page == "Watchlist":
