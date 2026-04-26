@@ -1,6 +1,4 @@
-import json
 import os
-import pytest
 from cache import write_cache, read_cache
 
 
