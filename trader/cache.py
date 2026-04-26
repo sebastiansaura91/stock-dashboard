@@ -17,6 +17,7 @@ def write_cache(ticker: str, data: dict, cache_dir: str = None) -> None:
     with open(tmp_path, "w", encoding="utf-8") as f:
         portalocker.lock(f, portalocker.LOCK_EX)
         json.dump(data, f, default=str)
+        portalocker.unlock(f)
     os.replace(tmp_path, path)
 
 
