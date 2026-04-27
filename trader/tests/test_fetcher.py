@@ -26,7 +26,7 @@ def make_mock_ticker(info=None, history=None):
 
 
 @patch("data.fetcher.yf.Ticker")
-def test_fetch_ohlcv_returns_correct_keys(mock_ticker_cls, ):
+def test_fetch_ohlcv_returns_correct_keys(mock_ticker_cls):
     mock_ticker_cls.return_value = make_mock_ticker()
     result = fetch_ohlcv("AAPL")
     assert "dates" in result
@@ -40,6 +40,7 @@ def test_fetch_fundamentals_maps_fields(mock_ticker_cls):
     result = fetch_fundamentals("AAPL")
     assert result["pe_ratio"] == 28.4
     assert result["sector"] == "Technology"
+    assert result["debt_equity"] == pytest.approx(1.7)
     assert isinstance(result["missing_fields"], list)
 
 

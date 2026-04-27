@@ -7,7 +7,7 @@ _FUNDAMENTAL_MAP = {
     "revenue_growth_yoy": "revenueGrowth",
     "gross_margin": "grossMargins",
     "operating_margin": "operatingMargins",
-    "debt_equity": lambda info: (info.get("debtToEquity") or 0) / 100,
+    "debt_equity": lambda info: (info["debtToEquity"] / 100) if info.get("debtToEquity") is not None else None,
     "sector": "sector",
 }
 
@@ -15,7 +15,8 @@ _FUNDAMENTAL_MAP = {
 def fetch_ohlcv(ticker: str, period: str = "6mo") -> dict:
     tk = yf.Ticker(ticker)
     hist = tk.history(period=period)
-    if hist.empty:
+    _required = {"Open", "High", "Low", "Close", "Volume"}
+    if hist.empty or not _required.issubset(hist.columns):
         return {k: [] for k in ("dates", "open", "high", "low", "close", "volume")}
     return {
         "dates": hist.index.strftime("%Y-%m-%d").tolist(),
