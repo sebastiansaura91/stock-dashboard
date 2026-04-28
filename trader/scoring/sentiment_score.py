@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from config import SENTIMENT_LOOKBACK_HOURS, SENTIMENT_HALF_LIFE_HOURS
 
 _LABEL_SCORE = {"positive": 1.0, "neutral": 0.5, "negative": 0.0}
+# Items with no timestamp get a fixed low weight rather than being excluded entirely.
+# Must stay low relative to a fresh item weight (~0.92) so that no-timestamp items
+# cannot overwhelm timestamped items even when numerous.
 _NO_TIMESTAMP_WEIGHT = 0.1
 
 
@@ -22,6 +25,9 @@ def _age_weight(published_at: str | None) -> float:
 def compute_sentiment_score(items: list[dict]) -> tuple[int | None, list[str]]:
     weighted_sum = 0.0
     weight_total = 0.0
+    contributing_count = 0
+    # Count contributing items by label (only those with weight > 0)
+    label_counts: dict[str, int] = {"positive": 0, "negative": 0, "neutral": 0}
 
     for item in items:
         label = (item.get("label") or "neutral").lower()
@@ -31,16 +37,19 @@ def compute_sentiment_score(items: list[dict]) -> tuple[int | None, list[str]]:
             continue
         weighted_sum += label_score * weight
         weight_total += weight
+        contributing_count += 1
+        if label in label_counts:
+            label_counts[label] += 1
 
-    if weight_total == 0 or len([i for i in items if _age_weight(i.get("published_at")) > 0]) < 3:
+    if weight_total == 0 or contributing_count < 3:
         return None, ["Insufficient recent sentiment data"]
 
     score = (weighted_sum / weight_total) * 100
     clamped = max(0, min(100, int(math.floor(score))))
 
-    bullish = sum(1 for i in items if i.get("label") == "positive")
-    bearish = sum(1 for i in items if i.get("label") == "negative")
-    neutral = sum(1 for i in items if i.get("label") == "neutral")
-    drivers = [f"{bullish} bullish / {bearish} bearish / {neutral} neutral items in last {SENTIMENT_LOOKBACK_HOURS}h"]
+    drivers = [
+        f"{label_counts['positive']} bullish / {label_counts['negative']} bearish / "
+        f"{label_counts['neutral']} neutral items in last {SENTIMENT_LOOKBACK_HOURS}h"
+    ]
 
     return clamped, drivers

@@ -1,4 +1,3 @@
-import pytest
 from datetime import datetime, timezone, timedelta
 from scoring.sentiment_score import compute_sentiment_score
 
@@ -37,9 +36,9 @@ def test_older_items_weighted_less():
     fresh_positive = [_make_item("positive", hours_ago=1) for _ in range(3)]
     stale_negative = [_make_item("negative", hours_ago=47) for _ in range(10)]
     score, _ = compute_sentiment_score(fresh_positive + stale_negative)
-    stale_score, _ = compute_sentiment_score(stale_negative + fresh_positive)
-    # Both should give the same result (order independent)
-    assert score == stale_score
+    # Fresh positives should outweigh 10x more stale negatives due to recency decay
+    assert score is not None
+    assert score > 50
 
 
 def test_no_timestamp_items_get_low_weight():
