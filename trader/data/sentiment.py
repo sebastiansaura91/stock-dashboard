@@ -1,4 +1,5 @@
 import time
+import itertools
 import logging
 import feedparser
 import requests
@@ -13,14 +14,11 @@ _USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
 ]
-_ua_index = 0
+_ua_cycle = itertools.cycle(_USER_AGENTS)
 
 
 def _next_ua() -> str:
-    global _ua_index
-    ua = _USER_AGENTS[_ua_index % len(_USER_AGENTS)]
-    _ua_index += 1
-    return ua
+    return next(_ua_cycle)
 
 
 def _retry_get(url: str, max_retries: int = 3, base_delay: float = 1.0, **kwargs):
@@ -31,12 +29,14 @@ def _retry_get(url: str, max_retries: int = 3, base_delay: float = 1.0, **kwargs
                 if attempt < max_retries - 1:
                     time.sleep(base_delay * (2 ** attempt))
                     continue
+                logger.error("GET %s blocked after %d attempts (status %d)", url, max_retries, resp.status_code)
                 return None
             return resp
         except Exception as e:
             logger.warning("GET %s attempt %d failed: %s", url, attempt + 1, e)
             if attempt < max_retries - 1:
                 time.sleep(base_delay * (2 ** attempt))
+    logger.error("GET %s failed after %d attempts", url, max_retries)
     return None
 
 
@@ -56,6 +56,9 @@ def _parse_dt(dt_str: str | None) -> str | None:
 def fetch_google_news(ticker: str) -> list[dict]:
     url = f"https://news.google.com/rss/search?q={ticker}+stock&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
+    if feed.get("bozo") and not feed.entries:
+        logger.warning("feedparser failed for %s: %s", url, feed.get("bozo_exception"))
+        return []
     items = []
     for e in feed.entries:
         items.append({
@@ -92,6 +95,9 @@ def fetch_stocktwits(ticker: str) -> list[dict]:
 def fetch_reddit_rss(ticker: str, subreddit: str) -> list[dict]:
     url = f"https://www.reddit.com/r/{subreddit}/search.rss?q={ticker}&sort=new"
     feed = feedparser.parse(url)
+    if feed.get("bozo") and not feed.entries:
+        logger.warning("feedparser failed for %s: %s", url, feed.get("bozo_exception"))
+        return []
     return [
         {
             "source": f"reddit_{subreddit}",
@@ -104,10 +110,10 @@ def fetch_reddit_rss(ticker: str, subreddit: str) -> list[dict]:
     ]
 
 
-def fetch_finviz(ticker: str) -> list[dict]:
+def fetch_finviz(ticker: str, _pre_request_delay: float = 2.0) -> list[dict]:
     url = f"https://finviz.com/quote.ashx?t={ticker}"
     headers = {"User-Agent": _next_ua()}
-    time.sleep(2)
+    time.sleep(_pre_request_delay)
     resp = _retry_get(url, headers=headers)
     if resp is None:
         logger.warning("Finviz blocked for %s — skipping", ticker)
@@ -120,6 +126,8 @@ def fetch_finviz(ticker: str) -> list[dict]:
         if link:
             items.append({
                 "source": "finviz",
+                # Finviz timestamps are relative text (e.g. "3h ago") — not parsed.
+                # Items will receive the minimum age weight in the scoring layer.
                 "headline": link.get_text(strip=True),
                 "published_at": None,
                 "label": None,
