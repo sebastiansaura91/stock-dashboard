@@ -1,7 +1,9 @@
+import logging
 import math
 import os
-import json
 import glob
+
+logger = logging.getLogger(__name__)
 
 _RATIO_CONFIG = {
     "pe_ratio":             {"weight": 0.20, "bullish": 18.0,  "bearish": 35.0,  "lower_is_better": True},
@@ -14,22 +16,35 @@ _RATIO_CONFIG = {
 
 
 def _score_ratio(value: float, bullish: float, bearish: float, lower_is_better: bool) -> float:
-    if lower_is_better:
-        bullish, bearish = bearish, bullish
+    """Score a ratio 0–100.
+    For higher-is-better: 100 at bullish threshold, 0 at bearish.
+    For lower-is-better: 100 at bullish (lower) threshold, 0 at bearish (higher) threshold.
+    """
     if bearish == bullish:
         return 50.0
-    raw = (value - bearish) / (bullish - bearish)
+    if lower_is_better:
+        # bullish < bearish; higher value = worse score
+        raw = (bearish - value) / (bearish - bullish)
+    else:
+        # bullish > bearish; higher value = better score
+        raw = (value - bearish) / (bullish - bearish)
     return max(0.0, min(100.0, raw * 100.0))
 
 
 def _compute_sector_medians(sector: str) -> dict:
-    """Compute median values per ratio from all cached tickers in the same sector."""
+    """Compute median ratio values from all cached tickers in the same sector.
+    Returns empty dict if fewer than 3 peers available for a given ratio.
+    Uses read_cache() to respect the cache locking contract.
+    """
+    from cache import read_cache
     from config import CACHE_DIR
     ratio_values: dict[str, list[float]] = {k: [] for k in _RATIO_CONFIG}
     for path in glob.glob(os.path.join(CACHE_DIR, "*.json")):
+        ticker = os.path.basename(path).replace(".json", "")
         try:
-            with open(path, "r") as f:
-                data = json.load(f)
+            data = read_cache(ticker, cache_dir=CACHE_DIR)
+            if data is None:
+                continue
             fund = data.get("fundamentals", {})
             if fund.get("sector") != sector:
                 continue
@@ -37,7 +52,8 @@ def _compute_sector_medians(sector: str) -> dict:
                 v = fund.get(key)
                 if v is not None:
                     ratio_values[key].append(float(v))
-        except Exception:
+        except Exception as exc:
+            logger.debug("Skipping %s in sector medians: %s", path, exc)
             continue
     medians = {}
     for key, values in ratio_values.items():
@@ -65,13 +81,13 @@ def compute_fundamental_score(fundamentals: dict) -> tuple[int | None, list[str]
         cfg = _RATIO_CONFIG[key]
         median = sector_medians.get(key)
         if median is not None and median > 0:
-            # Dynamic thresholds: 80% of median = bullish, 150% = bearish (for lower-is-better)
+            # Dynamic thresholds centred on sector median, ±30% spread
             if cfg["lower_is_better"]:
-                bullish = median * 0.8
-                bearish = median * 1.5
+                bullish = median * 0.7   # 30% below median → clearly better
+                bearish = median * 1.3   # 30% above median → clearly worse
             else:
-                bullish = median
-                bearish = median * 0.7
+                bullish = median * 1.3   # 30% above median → clearly better
+                bearish = median * 0.7   # 30% below median → clearly worse
         else:
             bullish = cfg["bullish"]
             bearish = cfg["bearish"]
