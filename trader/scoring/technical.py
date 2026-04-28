@@ -47,6 +47,7 @@ def _ohlcv_to_df(ohlcv: dict) -> pd.DataFrame:
 
 
 def detect_patterns(ohlcv: dict) -> list[dict]:
+    """Detect chart patterns. Requires n >= 30 bars; returns [] otherwise."""
     close = np.array(ohlcv["close"])
     dates = ohlcv["dates"]
     n = len(close)
@@ -104,21 +105,24 @@ def detect_patterns(ohlcv: dict) -> list[dict]:
                               "meaning": meaning, "reliability": reliability, "direction": direction})
 
     # Ascending / Descending / Symmetrical Triangle (40-day window)
+    # Slope is normalized per bar to be price-level independent
     if n >= 40:
         tri = close[-40:]
         tri_dates = dates[-40:]
         tri_peaks, _ = find_peaks(tri, distance=5)
         tri_troughs, _ = find_peaks(-np.array(tri), distance=5)
         if len(tri_peaks) >= 2 and len(tri_troughs) >= 2:
-            peak_slope = (tri[tri_peaks[-1]] - tri[tri_peaks[-2]]) / max(tri[tri_peaks[-2]], 1e-9)
-            trough_slope = (tri[tri_troughs[-1]] - tri[tri_troughs[-2]]) / max(abs(tri[tri_troughs[-2]]), 1e-9)
-            if trough_slope > 0.01 and abs(peak_slope) < 0.01:
+            bar_span_peaks = max(tri_peaks[-1] - tri_peaks[-2], 1)
+            bar_span_troughs = max(tri_troughs[-1] - tri_troughs[-2], 1)
+            peak_slope = ((tri[tri_peaks[-1]] - tri[tri_peaks[-2]]) / max(tri[tri_peaks[-2]], 1e-9)) / bar_span_peaks
+            trough_slope = ((tri[tri_troughs[-1]] - tri[tri_troughs[-2]]) / max(abs(tri[tri_troughs[-2]]), 1e-9)) / bar_span_troughs
+            if trough_slope > 0.001 and abs(peak_slope) < 0.001:
                 name, meaning, reliability, direction = _PATTERN_INFO["ascending_triangle"]
                 patterns.append({"name": name, "detected_at": tri_dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
-            elif peak_slope < -0.01 and abs(trough_slope) < 0.01:
+            elif peak_slope < -0.001 and abs(trough_slope) < 0.001:
                 name, meaning, reliability, direction = _PATTERN_INFO["descending_triangle"]
                 patterns.append({"name": name, "detected_at": tri_dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
-            elif peak_slope < -0.005 and trough_slope > 0.005:
+            elif peak_slope < -0.0005 and trough_slope > 0.0005:
                 name, meaning, reliability, direction = _PATTERN_INFO["symmetrical_triangle"]
                 patterns.append({"name": name, "detected_at": tri_dates[-1], "meaning": meaning, "reliability": reliability, "direction": direction})
 
@@ -149,7 +153,7 @@ def detect_patterns(ohlcv: dict) -> list[dict]:
         mid_idx = len(cup) // 2
         left = cup[:mid_idx]
         right = cup[mid_idx:]
-        if left and right and min(cup) < cup[0] * 0.95 and min(cup) < cup[-1] * 0.95:
+        if len(left) > 0 and len(right) > 0 and min(cup) < cup[0] * 0.95 and min(cup) < cup[-1] * 0.95:
             # U-shape: start and end near same level, dip in middle
             if abs(cup[0] - cup[-1]) / cup[0] < 0.05:
                 handle_declining = handle[-1] < handle[0]
@@ -184,15 +188,16 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
         else:
             signals["ema_20_50"] = 0
 
-    # EMA 50/200
-    ema200 = ta.ema(df["close"], length=min(200, len(df)))
+    # EMA 50/200 — only emit golden/death cross label when 200+ bars exist
+    ema200_len = min(200, len(df))
+    ema200 = ta.ema(df["close"], length=ema200_len)
     if ema50 is not None and ema200 is not None and not ema50.empty and not ema200.empty:
-        if ema50.iloc[-1] > ema200.iloc[-1]:
-            signals["ema_50_200"] = 1
-            drivers.append("Golden cross: EMA 50 above EMA 200")
+        bullish = ema50.iloc[-1] > ema200.iloc[-1]
+        signals["ema_50_200"] = 1 if bullish else -1
+        if len(df) >= 200:
+            drivers.append("Golden cross: EMA 50 above EMA 200" if bullish else "Death cross: EMA 50 below EMA 200")
         else:
-            signals["ema_50_200"] = -1
-            drivers.append("Death cross: EMA 50 below EMA 200")
+            drivers.append(f"EMA 50 {'above' if bullish else 'below'} EMA {ema200_len} ({'bullish' if bullish else 'bearish'})")
 
     # RSI
     rsi = ta.rsi(df["close"], length=14)
@@ -208,12 +213,14 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
             signals["rsi"] = 0
             drivers.append(f"RSI {r:.0f} — neutral")
 
-    # MACD
+    # MACD — use named columns to avoid positional fragility across pandas_ta versions
     macd_df = ta.macd(df["close"])
     if macd_df is not None and not macd_df.empty:
-        macd_line = macd_df.iloc[:, 0]
-        signal_line = macd_df.iloc[:, 2]
-        if not macd_line.empty and not signal_line.empty:
+        macd_cols = [c for c in macd_df.columns if c.startswith("MACD_")]
+        signal_cols = [c for c in macd_df.columns if c.startswith("MACDs_")]
+        if macd_cols and signal_cols:
+            macd_line = macd_df[macd_cols[0]]
+            signal_line = macd_df[signal_cols[0]]
             if macd_line.iloc[-1] > signal_line.iloc[-1]:
                 signals["macd"] = 1
                 drivers.append("MACD bullish crossover")
@@ -224,7 +231,9 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
     # OBV trend
     obv = ta.obv(df["close"], df["volume"])
     if obv is not None and len(obv) >= 10:
-        signals["obv"] = 1 if obv.iloc[-1] > obv.iloc[-10] else -1
+        obv_rising = obv.iloc[-1] > obv.iloc[-10]
+        signals["obv"] = 1 if obv_rising else -1
+        drivers.append("OBV rising — volume confirms uptrend" if obv_rising else "OBV falling — volume divergence (bearish)")
 
     # Volume
     avg_vol = df["volume"].rolling(20).mean().iloc[-1]
@@ -235,18 +244,23 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
     else:
         signals["volume"] = 0
 
-    # Bollinger Bands
+    # Bollinger Bands — use named columns to avoid positional fragility
     bb = ta.bbands(df["close"])
     if bb is not None and not bb.empty:
-        lower = bb.iloc[:, 0].iloc[-1]
-        upper = bb.iloc[:, 2].iloc[-1]
-        price = df["close"].iloc[-1]
-        if price <= lower:
-            signals["bbands"] = 1
-        elif price >= upper:
-            signals["bbands"] = -1
-        else:
-            signals["bbands"] = 0
+        lower_cols = [c for c in bb.columns if c.startswith("BBL_")]
+        upper_cols = [c for c in bb.columns if c.startswith("BBU_")]
+        if lower_cols and upper_cols:
+            lower = bb[lower_cols[0]].iloc[-1]
+            upper = bb[upper_cols[0]].iloc[-1]
+            price = df["close"].iloc[-1]
+            if price <= lower:
+                signals["bbands"] = 1
+                drivers.append("Price at lower Bollinger Band — potential oversold bounce")
+            elif price >= upper:
+                signals["bbands"] = -1
+                drivers.append("Price at upper Bollinger Band — potential overbought pullback")
+            else:
+                signals["bbands"] = 0
 
     # Stochastic
     stoch = ta.stoch(df["high"], df["low"], df["close"])
@@ -255,8 +269,10 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
         d = stoch.iloc[:, 1]
         if k.iloc[-1] < 30 and k.iloc[-1] > k.iloc[-2] and k.iloc[-1] > d.iloc[-1]:
             signals["stoch"] = 1
+            drivers.append(f"Stochastic %K {k.iloc[-1]:.0f} — oversold and turning up")
         elif k.iloc[-1] > 70 and k.iloc[-1] < k.iloc[-2] and k.iloc[-1] < d.iloc[-1]:
             signals["stoch"] = -1
+            drivers.append(f"Stochastic %K {k.iloc[-1]:.0f} — overbought and turning down")
         else:
             signals["stoch"] = 0
 
@@ -271,7 +287,8 @@ def compute_technical_score(ohlcv: dict) -> tuple[int, list[str], list[dict]]:
         else:
             signals["adx"] = 0
 
-    # ATR
+    # ATR — low volatility (norm ATR < 2%) scored bullish; high volatility scored bearish.
+    # Rationale: low ATR signals a calm, controlled trend; high ATR signals choppy/unstable price action.
     atr = ta.atr(df["high"], df["low"], df["close"])
     if atr is not None and not atr.empty:
         norm_atr = atr.iloc[-1] / df["close"].iloc[-1]
