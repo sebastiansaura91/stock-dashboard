@@ -11,6 +11,9 @@ SCREENER_BATCH_SIZE = 50
 
 DEFAULT_WEIGHTS = {"technical": 0.40, "fundamental": 0.35, "sentiment": 0.25}
 
+# Verdict thresholds — adjust here to recalibrate all signals without touching engine.py
+VERDICT_THRESHOLDS = {"strong_buy": 75, "buy": 60, "hold": 45, "sell": 30}
+
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 LOG_FILE = os.path.join(BASE_DIR, "logs", "trader.log")
 

@@ -1,24 +1,24 @@
 import math
-from config import DEFAULT_WEIGHTS
+from config import DEFAULT_WEIGHTS, VERDICT_THRESHOLDS
 from scoring.technical import compute_technical_score
 from scoring.fundamental import compute_fundamental_score
 from scoring.sentiment_score import compute_sentiment_score
 
 
 def _verdict(score: int) -> str:
-    if score >= 75:
+    if score >= VERDICT_THRESHOLDS["strong_buy"]:
         return "Strong BUY"
-    if score >= 60:
+    if score >= VERDICT_THRESHOLDS["buy"]:
         return "BUY"
-    if score >= 45:
+    if score >= VERDICT_THRESHOLDS["hold"]:
         return "HOLD"
-    if score >= 30:
+    if score >= VERDICT_THRESHOLDS["sell"]:
         return "SELL"
     return "Strong SELL"
 
 
 def compute_full_score(cache_data: dict, weights: dict = None) -> dict:
-    weights = weights or DEFAULT_WEIGHTS
+    weights = weights if weights is not None else DEFAULT_WEIGHTS
 
     # Support test overrides
     overrides = cache_data.get("_override_scores", {})

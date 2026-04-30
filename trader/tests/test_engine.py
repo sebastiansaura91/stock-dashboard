@@ -41,10 +41,16 @@ def test_verdict_strong_sell_at_20():
     assert result["verdict"] == "Strong SELL"
 
 
+def test_verdict_hold_at_50():
+    result = compute_full_score(make_cache(tech=50, fund=50, sent=50))
+    assert result["verdict"] == "HOLD"
+
+
 def test_null_sub_score_excluded_from_final():
     result = compute_full_score(make_cache(tech=80, fund=None, sent=80))
     # Only tech(40%) and sent(25%) remain, renormalised to 100%
     assert result["final"] is not None
+    assert result["final"] == 80
     assert result["fundamental"] is None
 
 
