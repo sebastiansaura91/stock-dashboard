@@ -33,13 +33,17 @@ def main() -> None:
     page = st.session_state.get("page", nav.lower())
 
     if page == "detail":
-        ticker = st.session_state.get("selected_ticker", "AAPL")
+        ticker = st.session_state.get("selected_ticker")
+        if not ticker:
+            # No ticker selected — return to watchlist
+            st.session_state["page"] = None
+            st.rerun()
         # Back button
         if st.sidebar.button("← Back"):
             st.session_state["page"] = None
             st.rerun()
         detail_page.render(ticker)
-    elif page == "screener" or nav == "Screener":
+    elif page == "screener":
         screener_page.render()
     else:
         watchlist_page.render()
