@@ -38,6 +38,8 @@ def _build_fundamentals_rows(fundamentals: dict) -> list:
         value = fundamentals[key]
         if value is None or key in missing:
             continue
+        if not isinstance(value, (int, float)):
+            continue
         rows.append({
             "Metric": key.replace("_", " ").title(),
             "Value": f"{value:.2f}",
@@ -103,7 +105,7 @@ def render(ticker: str) -> None:
     c2.metric("Fundamental", _fmt(scores["fundamental"]))
     c3.metric("Sentiment", _fmt(scores["sentiment"]))
     c4.metric("Final Score", _fmt(scores["final"]))
-    c5.metric("Verdict", scores["verdict"])
+    c5.metric("Verdict", _fmt(scores["verdict"]))
 
     # ------------------------------------------------------------------
     # Price chart (candlestick)
