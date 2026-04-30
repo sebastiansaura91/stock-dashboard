@@ -1,20 +1,36 @@
 """Screener page — bulk S&P 500 scanner ranked by final score."""
 
 import csv
+import logging
+from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
 
 from cache import read_cache
 from config import SCREENER_BATCH_SIZE, SCREENER_STALE_HOURS, SCREENER_UNIVERSE
-from pages.watchlist import _is_stale
 from scheduler import refresh_ticker_now
 from scoring.engine import compute_full_score
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Module-level helpers (importable by tests)
 # ---------------------------------------------------------------------------
+
+
+def _is_stale(cache_data: dict) -> bool:
+    """Return True if *cache_data* is older than SCREENER_STALE_HOURS."""
+    fetched_at = cache_data.get("fetched_at")
+    if not fetched_at:
+        return True
+    try:
+        dt = datetime.fromisoformat(fetched_at)
+        age_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+        return age_hours > SCREENER_STALE_HOURS
+    except Exception:
+        return True
 
 
 def _load_universe() -> list[str]:
@@ -96,7 +112,8 @@ def render() -> None:
 
                 try:
                     scores = compute_full_score(cache_data)
-                except Exception:
+                except Exception as exc:
+                    logger.warning("compute_full_score failed for %s: %s", ticker, exc)
                     progress_bar.progress(int((i + 1) / total * 100))
                     continue
 
