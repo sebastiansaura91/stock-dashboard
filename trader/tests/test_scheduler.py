@@ -176,6 +176,42 @@ class TestStartSchedulerIsIdempotent(unittest.TestCase):
         assert mock_instance.start.call_count == 1, (
             "scheduler.start() should only be called once even if start_scheduler is called twice"
         )
+        # Constructor should only be called once — no duplicate instantiation.
+        MockScheduler.assert_called_once()
+
+
+class TestStopScheduler(unittest.TestCase):
+    """stop_scheduler should shut down the running scheduler and remove it from session_state."""
+
+    @patch("scheduler.BackgroundScheduler")
+    def test_stop_scheduler_shuts_down_running_scheduler(self, MockScheduler):
+        from scheduler import stop_scheduler
+
+        mock_instance = MagicMock()
+        mock_instance.running = True
+
+        session_state = {"_scheduler": mock_instance}
+
+        with patch("scheduler.st") as mock_st:
+            mock_st.session_state = session_state
+            stop_scheduler()
+
+        mock_instance.shutdown.assert_called_once_with(wait=False)
+        assert "_scheduler" not in session_state, (
+            "stop_scheduler should remove _scheduler from session_state"
+        )
+
+    @patch("scheduler.BackgroundScheduler")
+    def test_stop_scheduler_no_error_when_absent(self, MockScheduler):
+        """stop_scheduler should not raise if no scheduler is present in session_state."""
+        from scheduler import stop_scheduler
+
+        session_state = _make_session_state()  # empty — no scheduler key
+
+        with patch("scheduler.st") as mock_st:
+            mock_st.session_state = session_state
+            # Should not raise
+            stop_scheduler()
 
 
 if __name__ == "__main__":

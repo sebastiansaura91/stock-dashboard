@@ -46,6 +46,11 @@ def refresh_ticker(ticker: str) -> None:
         if unlabelled_indices:
             headlines = [sentiment_items[i]["headline"] for i in unlabelled_indices]
             classifications = classify_batch(headlines)
+            if len(classifications) != len(headlines):
+                logger.warning(
+                    "refresh_ticker: classify_batch returned %d results for %d headlines (%s)",
+                    len(classifications), len(headlines), ticker,
+                )
             for idx, classification in zip(unlabelled_indices, classifications):
                 sentiment_items[idx]["label"] = classification["label"]
                 sentiment_items[idx]["score"] = classification["score"]
@@ -58,8 +63,8 @@ def refresh_ticker(ticker: str) -> None:
         }
         write_cache(ticker, cache_data)
         logger.info("refresh_ticker: %s updated successfully", ticker)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("refresh_ticker: error refreshing %s: %s", ticker, exc)
+    except Exception:  # noqa: BLE001
+        logger.exception("refresh_ticker: error refreshing %s", ticker)
 
 
 # ---------------------------------------------------------------------------
@@ -80,6 +85,8 @@ def start_scheduler(tickers: list[str]) -> None:
         scheduler = BackgroundScheduler(daemon=True)
         st.session_state[_SESSION_KEY] = scheduler
 
+    # APScheduler 3.x supports add_job before start(); jobs are queued and
+    # begin firing only once the scheduler is running.
     for ticker in tickers:
         scheduler.add_job(
             func=refresh_ticker,
@@ -95,7 +102,12 @@ def start_scheduler(tickers: list[str]) -> None:
 
 
 def stop_scheduler() -> None:
-    """Stop the scheduler (if running) and remove it from session_state."""
+    """Stop the scheduler (if running) and remove it from session_state.
+
+    Uses wait=False for a non-blocking shutdown.  Any in-progress refresh_ticker
+    job may continue to run briefly after this returns; cache writes are still
+    safe because write_cache is portalocker-guarded.
+    """
     scheduler: BackgroundScheduler | None = st.session_state.get(_SESSION_KEY)
     if scheduler is not None and scheduler.running:
         scheduler.shutdown(wait=False)
