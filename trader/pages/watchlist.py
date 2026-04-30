@@ -107,7 +107,15 @@ def render() -> None:
             )
             continue
 
-        scores = compute_full_score(cache_data)
+        try:
+            scores = compute_full_score(cache_data)
+        except Exception as exc:
+            st.warning(f"{ticker}: scoring failed — {exc}")
+            rows.append({
+                "Ticker": ticker, "Technical": "N/A", "Fundamental": "N/A",
+                "Sentiment": "N/A", "Final": "N/A", "Verdict": "N/A",
+            })
+            continue
         rows.append(
             {
                 "Ticker": ticker,
@@ -121,5 +129,5 @@ def render() -> None:
 
     if rows:
         df = pd.DataFrame(rows)
-        styled = df.style.applymap(colour_verdict, subset=["Verdict"])
+        styled = df.style.map(colour_verdict, subset=["Verdict"])
         st.dataframe(styled, use_container_width=True)
