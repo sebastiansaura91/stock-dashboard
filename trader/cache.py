@@ -21,8 +21,11 @@ def write_cache(ticker: str, data: dict, cache_dir: str = None) -> None:
         json.dump(data, f, default=str)
         f.flush()
         os.fsync(f.fileno())
-        os.replace(tmp_path, path)
-        # lock released by context manager after replace
+        portalocker.unlock(f)
+    # Rename outside the context manager so no lock is held during os.replace.
+    # On Windows, os.replace raises PermissionError if the destination is open by
+    # another process (e.g. a concurrent read_cache call holding a shared lock).
+    os.replace(tmp_path, path)
 
 
 def read_cache(ticker: str, cache_dir: str = None) -> dict | None:

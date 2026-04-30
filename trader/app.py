@@ -30,7 +30,9 @@ def main() -> None:
     )
 
     # Route to page
-    page = st.session_state.get("page", nav.lower())
+    # Use `or` so that an explicit None (set by the back button) falls through
+    # to the nav selection, rather than `get()` returning None as a valid value.
+    page = st.session_state.get("page") or nav.lower()
 
     if page == "detail":
         ticker = st.session_state.get("selected_ticker")
