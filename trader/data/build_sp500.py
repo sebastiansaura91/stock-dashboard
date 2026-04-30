@@ -18,13 +18,17 @@ def fetch_sp500_tickers() -> list[str]:
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", {"id": "constituents"})
+    if table is None:
+        raise ValueError("Could not find table#constituents on Wikipedia page — page structure may have changed")
     tickers = []
     for row in table.find_all("tr")[1:]:
         cells = row.find_all("td")
         if cells:
-            raw = cells[0].text.strip()
+            raw = cells[0].get_text(strip=True)
             # Wikipedia uses dots; Yahoo Finance uses hyphens (e.g., BRK.B → BRK-B)
-            tickers.append(raw.replace(".", "-"))
+            ticker = raw.replace(".", "-")
+            if ticker:
+                tickers.append(ticker)
     return tickers
 
 
