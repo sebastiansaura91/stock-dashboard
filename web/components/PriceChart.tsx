@@ -17,12 +17,14 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
   useEffect(() => {
     if (!containerRef.current || !ohlcv.dates.length) return;
 
-    let chart: ReturnType<typeof import("lightweight-charts")["createChart"]> | null = null;
+    let cancelled = false;
+    let chartInstance: { remove: () => void; applyOptions: (o: object) => void; priceScale: (id: string) => { applyOptions: (o: object) => void }; timeScale: () => { fitContent: () => void }; addSeries: (type: unknown, opts: object) => { setData: (d: unknown[]) => void } } | null = null;
+    let roInstance: ResizeObserver | null = null;
 
     import("lightweight-charts").then(({ createChart, CandlestickSeries, HistogramSeries }) => {
-      if (!containerRef.current) return;
+      if (cancelled || !containerRef.current) return;
 
-      chart = createChart(containerRef.current, {
+      const chart = createChart(containerRef.current, {
         width: containerRef.current.clientWidth,
         height: 320,
         layout: { background: { color: "#ffffff" }, textColor: "#374151" },
@@ -30,6 +32,7 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
         rightPriceScale: { borderColor: "#e5e7eb" },
         timeScale: { borderColor: "#e5e7eb", timeVisible: true },
       });
+      chartInstance = chart;
 
       const candleSeries = chart.addSeries(CandlestickSeries, {
         upColor: "#22c55e",
@@ -66,21 +69,20 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
       volumeSeries.setData(volumeData);
       chart.timeScale().fitContent();
 
-      // Resize observer
       const ro = new ResizeObserver(() => {
-        if (containerRef.current && chart) {
-          chart.applyOptions({ width: containerRef.current.clientWidth });
+        if (containerRef.current && chartInstance) {
+          chartInstance.applyOptions({ width: containerRef.current.clientWidth });
         }
       });
       ro.observe(containerRef.current);
-
-      return () => {
-        ro.disconnect();
-        chart?.remove();
-      };
+      roInstance = ro;
     });
 
-    return () => { chart?.remove(); };
+    return () => {
+      cancelled = true;
+      roInstance?.disconnect();
+      chartInstance?.remove();
+    };
   }, [ohlcv]);
 
   return (
