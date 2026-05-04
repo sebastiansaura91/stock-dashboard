@@ -93,3 +93,33 @@ def test_get_stock_not_found_returns_404():
     with patch("api.routers.stock.read_cache", return_value=None):
         response = client.get("/api/stock/FAKE")
     assert response.status_code == 404
+
+
+def test_screener_returns_filtered_results():
+    mock_cache = {
+        "ohlcv": {"close": [150.0], "dates": ["2026-04-30"]},
+        "fundamentals": {"company_name": "Apple Inc", "sector": "Technology", "missing_fields": []},
+        "sentiment_items": [],
+        "_override_scores": {"technical": 80, "fundamental": 75, "sentiment": 70},
+    }
+    # Patch sp500 list and read_cache
+    with patch("api.routers.screener._load_sp500", return_value=["AAPL", "MSFT"]):
+        with patch("api.routers.screener.read_cache", return_value=mock_cache):
+            response = client.get("/api/screener?min_score=60")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert all(r["final_score"] >= 60 for r in data if r["final_score"] is not None)
+
+
+def test_screener_filters_by_verdict():
+    mock_cache = {
+        "ohlcv": {"close": [100.0], "dates": ["2026-04-30"]},
+        "fundamentals": {"company_name": "Test", "missing_fields": []},
+        "sentiment_items": [],
+        "_override_scores": {"technical": 80, "fundamental": 80, "sentiment": 80},
+    }
+    with patch("api.routers.screener._load_sp500", return_value=["AAPL"]):
+        with patch("api.routers.screener.read_cache", return_value=mock_cache):
+            response = client.get("/api/screener?verdict=Strong+BUY")
+    assert response.status_code == 200
