@@ -22,3 +22,14 @@ SENTIMENT_HALF_LIFE_HOURS = 12
 WATCHLIST_STALE_HOURS = 2
 SCREENER_STALE_HOURS = 4
 FINBERT_BATCH_SIZE = 16
+
+# Supabase (read from environment — never hardcode)
+SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+
+# HuggingFace Inference API
+HF_API_KEY: str = os.getenv("HF_API_KEY", "")
+HF_API_URL: str = os.getenv(
+    "HF_API_URL",
+    "https://api-inference.huggingface.co/models/ProsusAI/finbert",
+)
