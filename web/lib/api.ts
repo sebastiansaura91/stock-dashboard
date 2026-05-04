@@ -1,3 +1,5 @@
+import type { WatchlistItem, StockDetail, ScreenerResult } from "./types";
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function get<T>(path: string): Promise<T> {
@@ -21,8 +23,6 @@ async function del<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error(`API DELETE ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
-
-import type { WatchlistItem, StockDetail, ScreenerResult } from "./types";
 
 export const api = {
   watchlist: {

@@ -75,18 +75,18 @@ export function StockTable({ rows, onRemove, onAdd, addLabel = "Add" }: Props) {
               <td className="px-4 py-3">
                 <VerdictBadge verdict={row.verdict} />
               </td>
-              {onRemove && (
+              {(onRemove || onAdd) && (
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => onRemove(row.ticker)} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
-                    Remove
-                  </button>
-                </td>
-              )}
-              {onAdd && (
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => onAdd(row.ticker)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    {addLabel}
-                  </button>
+                  {onRemove && (
+                    <button onClick={() => onRemove(row.ticker)} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+                      Remove
+                    </button>
+                  )}
+                  {onAdd && (
+                    <button onClick={() => onAdd(row.ticker)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                      {addLabel}
+                    </button>
+                  )}
                 </td>
               )}
             </tr>
