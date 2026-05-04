@@ -58,6 +58,7 @@ def test_write_cache_calls_upsert():
     call_arg = client.table.return_value.upsert.call_args[0][0]
     assert call_arg["ticker"] == "AAPL"
     assert call_arg["data"] == {"ohlcv": {}}
+    assert "updated_at" in call_arg
 
 
 def test_get_watchlist_tickers_returns_list():
@@ -78,6 +79,7 @@ def test_add_watchlist_ticker_calls_insert():
         from cache import add_watchlist_ticker
         add_watchlist_ticker("TSLA")
     client.table.assert_called_with("watchlist")
+    client.table.return_value.insert.assert_called_once_with({"ticker": "TSLA"})
 
 
 def test_remove_watchlist_ticker_calls_delete():
