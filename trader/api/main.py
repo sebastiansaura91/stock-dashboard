@@ -33,7 +33,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers are imported here (after app is created to avoid circular imports)
+# Routers are intentionally imported AFTER `app` is created.
+# Moving them to the top would cause a circular import: the router modules
+# import from `cache` and `scoring.engine`, which in turn can import from
+# `config` — and if any of those trigger an import of `api.main` before `app`
+# exists, FastAPI raises an AttributeError. Keeping them here is safe.
 from api.routers import watchlist, stock, screener  # noqa: E402
 
 app.include_router(watchlist.router, prefix="/api")
