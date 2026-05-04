@@ -3,5 +3,5 @@ builder = "nixpacks"
 buildCommand = "pip install -r trader/requirements.txt"
 
 [deploy]
-startCommand = "cd trader && uvicorn api.main:app --host 0.0.0.0 --port $PORT"
+startCommand = "cd trader && uvicorn api.main:app --host 0.0.0.0 --port 8000"
 healthcheckPath = "/api/health"
