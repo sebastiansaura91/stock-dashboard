@@ -196,6 +196,16 @@ Sections (top to bottom):
 
 FastAPI allows requests from the Vercel domain and `localhost:3000` for local development.
 
+## Clarifications
+
+**Screener data source:** `/api/screener` scans the existing `data/sp500.csv` universe (~500 tickers). Only tickers with a valid cached entry are returned — the screener does not trigger fresh fetches for uncached tickers.
+
+**HF API fallback:** If the HF Inference API is unavailable, the system serves whatever sentiment data is already in the Supabase cache (even if slightly stale). A fresh HF API call is only attempted when the cache entry is due for refresh (>15 min old).
+
+**`POST /api/watchlist` response:** Returns `{"ticker": "AAPL", "status": "added"}` immediately. A background fetch is enqueued for the new ticker; the client should poll `GET /api/stock/{ticker}` until scores appear.
+
+**Runtime targets:** Python 3.11+, Node.js 18+.
+
 ## Out of Scope
 
 - User authentication / accounts
