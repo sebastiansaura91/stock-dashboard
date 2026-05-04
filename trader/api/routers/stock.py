@@ -36,6 +36,9 @@ def get_stock(ticker: str, background_tasks: BackgroundTasks) -> dict:
     if fetched_at_str:
         try:
             fetched_at = datetime.fromisoformat(fetched_at_str)
+            # Ensure timezone-aware for comparison (treat naive timestamps as UTC)
+            if fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=timezone.utc)
             age_minutes = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 60
             if age_minutes > _STALE_MINUTES:
                 background_tasks.add_task(_refresh, ticker)
