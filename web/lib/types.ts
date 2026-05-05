@@ -17,6 +17,18 @@ export interface ChartPattern {
   direction: "bullish" | "bearish" | "neutral";
 }
 
+export interface TradeGuidance {
+  action: string;
+  rationale: string;
+  entry_low: number;
+  entry_high: number;
+  target: number;
+  stop_loss: number;
+  atr: number;
+  risk_reward: number;
+  is_bullish: boolean;
+}
+
 export interface StockDetail {
   ticker: string;
   company: string;
@@ -49,6 +61,7 @@ export interface StockDetail {
     company_name: string | null;
   };
   fetched_at: string | null;
+  guidance: TradeGuidance | null;
 }
 
 export interface ScreenerResult {

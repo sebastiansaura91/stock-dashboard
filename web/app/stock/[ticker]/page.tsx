@@ -5,6 +5,7 @@ import { ScoreBar } from "@/components/ScoreBar";
 import { DriverList } from "@/components/DriverList";
 import { PatternCard } from "@/components/PatternCard";
 import { PriceChart } from "@/components/PriceChart";
+import { TradeGuidanceCard } from "@/components/TradeGuidanceCard";
 import type { StockDetail } from "@/lib/types";
 
 export const revalidate = 900;
@@ -60,6 +61,11 @@ export default async function StockPage({ params }: { params: { ticker: string }
           </div>
         ))}
       </div>
+
+      {/* Trade guidance */}
+      {stock.guidance && (
+        <TradeGuidanceCard guidance={stock.guidance} />
+      )}
 
       {/* Price chart */}
       {stock.ohlcv.dates.length > 0 && (

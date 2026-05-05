@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from cache import read_cache
 from config import WATCHLIST_STALE_HOURS
 from scoring.engine import compute_full_score
+from scoring.guidance import compute_guidance
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,12 +48,16 @@ def get_stock(ticker: str, background_tasks: BackgroundTasks) -> dict:
 
     scores = compute_full_score(data)
     fund = data.get("fundamentals", {})
-    close = data.get("ohlcv", {}).get("close", [])
+    ohlcv_data = data.get("ohlcv", {})
+    close = ohlcv_data.get("close", [])
+
+    price = round(close[-1], 2) if close else None
+    guidance = compute_guidance(ohlcv_data, scores["verdict"], price) if price else None
 
     return {
         "ticker": ticker,
         "company": fund.get("company_name", ticker),
-        "price": round(close[-1], 2) if close else None,
+        "price": price,
         "technical_score": scores["technical"],
         "fundamental_score": scores["fundamental"],
         "sentiment_score": scores["sentiment"],
@@ -72,6 +77,7 @@ def get_stock(ticker: str, background_tasks: BackgroundTasks) -> dict:
             )
         },
         "fetched_at": data.get("fetched_at"),
+        "guidance": guidance,
     }
 
 
