@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { IChartApi } from "lightweight-charts";
 
 interface OHLCVData {
   dates: string[];
@@ -18,10 +19,10 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
     if (!containerRef.current || !ohlcv.dates.length) return;
 
     let cancelled = false;
-    let chartInstance: { remove: () => void; applyOptions: (o: object) => void; priceScale: (id: string) => { applyOptions: (o: object) => void }; timeScale: () => { fitContent: () => void }; addSeries: (type: unknown, opts: object) => { setData: (d: unknown[]) => void } } | null = null;
+    let chartInstance: IChartApi | null = null;
     let roInstance: ResizeObserver | null = null;
 
-    import("lightweight-charts").then(({ createChart, CandlestickSeries, HistogramSeries }) => {
+    import("lightweight-charts").then(({ createChart }) => {
       if (cancelled || !containerRef.current) return;
 
       const chart = createChart(containerRef.current, {
@@ -34,7 +35,7 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
       });
       chartInstance = chart;
 
-      const candleSeries = chart.addSeries(CandlestickSeries, {
+      const candleSeries = chart.addCandlestickSeries({
         upColor: "#22c55e",
         downColor: "#ef4444",
         borderUpColor: "#22c55e",
@@ -43,7 +44,7 @@ export function PriceChart({ ohlcv }: { ohlcv: OHLCVData }) {
         wickDownColor: "#ef4444",
       });
 
-      const volumeSeries = chart.addSeries(HistogramSeries, {
+      const volumeSeries = chart.addHistogramSeries({
         color: "#93c5fd",
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
